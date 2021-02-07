@@ -6,7 +6,8 @@ const admin = require('../middlewares/admin');
 const verifyObjectId = require('../middlewares/verifyObjectId');
 const { Table } = require('../models/table');
 const { User } = require('../models/user');
-const { date } = require('joi');
+const luxon = require('luxon');
+const { Console } = require('winston/lib/winston/transports');
 
 router.get('/', [auth, admin], async (req, res)=>{
     const reservations = await Reservation.find();
@@ -27,6 +28,7 @@ router.get('/:id', [auth, verifyObjectId], async (req, res)=>{
     }
 });
 
+
 //Todo: Debug this code
 router.post('/',auth, async (req, res)=>{
     const {value, error} = joiSchema.validate(req.body);
@@ -35,25 +37,50 @@ router.post('/',auth, async (req, res)=>{
     const table = await Table.findOne({tableId:value.tableId});
     if(!table) return res.status(404).send('Table not found');
 
-    console.log("Hours",value.time.getMinutes(), value.time);
+    //console.log(Date.parse(value.time));
 
-    if(!(value.time.getHours() || value.time.getMinutes())) return res.status(400).send('Invalid time');
+    try{
+        value.time = new Date(value.time);
+    }
+    catch(e){
+        return res.status(400).send(e);
+    }
+    const userExistingReservation = await Reservation.findOne({userId:req.user._id, completed:false});
+    if(userExistingReservation) return res.status(400).send("User has a reservation already");
 
+    let date = value.time;
+    let afterTime = new Date(date.getTime()-60*60*1000);
+    let beforeTime = new Date(date.getTime()+60*60*1000);
+
+    const existingReservation = await Reservation.findOne({tableId:table._id, completed:false, time:{
+        $gt:afterTime,
+        $lt:beforeTime,
+    }});
+    if(existingReservation) return res.status(400).send("Table already reserved");
+
+
+    /*
     const reservations = await Reservation.find({tableId:table._id, completed:false});
+    const checkExistingReservation = await Reservation.findOne({userId:req.user._id, completed:false});
+    console.log(checkExistingReservation);
+    if(checkExistingReservation) return res.status(400).send("User has a reservation already");
 
     for (const i of reservations) {
         const reservedTime = i.time;
+        console.log("ReservedTime:",reservedTime.c);
         const requestedTime = value.time;
-        let reservationAvailable = reservedTime.getFullYear() !== requestedTime.getFullYear();
-        reservationAvailable &= reservedTime.getMonth() != requestedTime.getMonth();
-        reservationAvailable &= reservedTime.getDate() !== requestedTime.getDate();
-        reservationAvailable &= reservationTime.getHours() - requestedTime.getHours() <= 1;
-        reservationAvailable &= i.userId !== req.user._id;
-        if(!reservationAvailable) return res.status(400).send('Reservation Not Available');
+        console.log("Requested time",requestedTime.c)
+        console.log("Duration:", new Date(reservedTime-requestedTime));
+        
+        const hourDifference = ((reservedTime-requestedTime)/3600000);
+
+        if(Math.abs(hourDifference)<1) return res.status(400).send('Reservation Not Available');
+
     }
+    */
 
     const reservation = new Reservation({
-        tableId:value.tableId,
+        tableId:table._id,
         time:value.time,
         userId:req.user._id,
     });
@@ -63,26 +90,60 @@ router.post('/',auth, async (req, res)=>{
 });
 
 router.get('/:dd/:mm/:yyyy', auth, async (req, res)=>{
+
     try{
-        var date= new Date(`${req.params.yyyy}-${req.params.mm}-${req.params.dd}`);
-        console.log(date);
+        var date = new Date(Number.parseInt(req.params.yyyy), Number.parseInt(req.params.mm)-1,Number.parseInt(req.params.dd));
     }
     catch(e){
-        res.status(400).send(e);
+        res.status(400).send("Invalid Date");
+        return console.log("Error");
     }
-    console.log(`${date.getFullYear()}-${date.getMonth()}-${date.getDate()+2}`);
-    console.log(new Date(`${date.getFullYear()}-${date.getMonth()}-${date.getDate()+2}`));
-
+    console.log(date);
+    console.log(new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1));
+    
     const reservations = await Reservation.find({time:{
         $gte:date,
-        $lt:new Date(date.getFullYear(), date.getMonth(), date.getDate()+2),
+        $lt:new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1),
     }});
 
     res.send(reservations);
 
+});
+
+router.delete('/:id', [auth, verifyObjectId], async (req, res)=>{
+    const reservation = await Reservation.findById(req.params.id);
+    if(!reservation) return res.status(404).send('Reservation not found');
+
+    if(req.user.isAdmin || reservation.useriId===req.user._id){
+        res.send(reservation);
+        return reservation.remove();
+    }
+
+    else{
+        return res.status(401).send('Access denied');
+    }
 })
+
+
+router.get('/myreservations', auth, async (req, res)=>{
+    //Untested
+    const reservations = await Reservation.find({userId:req.user._id});
+    res.status(200).send(reservations);
+});
+
+router.get('/myreservations/active', auth, async (req, res)=>{
+    //Untested
+    const reservation = await Reservation.findOne({userId:req.user._id, completed:false});
+    res.status(200).send(reservations);
+});
 
 
 
 
 module.exports = router;
+
+
+
+//The endpoint expects time in IST
+//Stores as UTC
+//Time format 2021-02-06T09:00:00.00

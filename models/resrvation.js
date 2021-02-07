@@ -1,13 +1,19 @@
 const joi = require('joi');
 const mongoose = require('mongoose');
 const autoIncrement = require('mongoose-auto-increment');
+const luxon = require('luxon');
+
 
 const joiSchema = joi.object({
     tableId:joi.string().required(),
-    time:joi.date(),
+    time:joi.string().required(),
 });
 
 const mongooseSchema = new mongoose.Schema({
+    created:{
+        type:Date,
+        default:Date.now()
+    },
     tableId:{
         type:String,
         required:true,

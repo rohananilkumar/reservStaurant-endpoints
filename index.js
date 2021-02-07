@@ -16,7 +16,7 @@ mongoose.connect("mongodb://localhost/reservStaurant", ()=> {
     console.log('Connected to db...');
 });
 
-app.use('/api/users/',auth);
+app.use('/api/auth/',auth);
 app.use('/api/tables/', tables);
 app.use('/api/menuitems/',menuItems);
 app.use('/api/orders/',orders);

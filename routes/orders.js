@@ -7,10 +7,22 @@ const {User} = require('../models/user');
 const {Table} = require('../models/table');
 const {MenuItem} = require('../models/menuItem');
 const verifyObjectId = require('../middlewares/verifyObjectId');
+const { Reservation } = require('../models/resrvation');
 
 router.get('/', [auth, admin], async (req, res)=>{
     const orders = await Order.find();
     res.send(orders);
+})
+
+router.get('/:id', [auth, verifyObjectId], async (req, res)=>{
+    //Untested
+    const order = await Order.findById(req.params.id);
+
+    if(!order) return res.status(404).send('Order with order id not found');
+
+    if(order.userId != req.user._id && !req.user.isAdmin) return res.status(401).send("Access denied");
+
+    res.send(order);
 })
 
 router.post('/', auth, async (req, res)=>{
@@ -21,9 +33,11 @@ router.post('/', auth, async (req, res)=>{
     const user = await User.findById(req.user._id);
     if(!user) return res.status(404).send('User with user id not found');
 
-    const table = await Table.findOne({occupantId:user._id});
-    if(!table) return res.status(404).send('User has not occupied any table');
-
+    if(!value.isParcel){
+        const table = await Table.findOne({occupantId:user._id});
+        if(!table) return res.status(404).send('User has not occupied any table');
+    }
+    
     const existingOrder = await Order.findOne({userId:user._id, billed:false});
     if(existingOrder) return res.status(400).send('User has not billed previous order');
 
@@ -45,7 +59,8 @@ router.post('/', auth, async (req, res)=>{
 
     const order = new Order({
         userId:user._id,
-        tableId:table._id,
+        tableId:value.isParcel?null:table._id,
+        isParcel:value.isParcel,
         order:orders.map(x=>{return {menuItemId:x.menuItemId, quantity:x.quantity}})
     })
 
@@ -91,6 +106,8 @@ router.delete('/:id', [auth, admin, verifyObjectId], async (req, res)=>{
     res.status(200).send(order);
     await order.remove();
 });
+
+
 
 router.post('/bill', auth, async (req, res)=>{
     const order = await Order.findOne({userId:req.user._id, billed:false});

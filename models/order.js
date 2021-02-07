@@ -2,16 +2,18 @@ const joi = require('joi');
 const mongoose = require('mongoose');
 const {MenuItem} = require('./menuItem');
 const autoIncrement = require('mongoose-auto-increment');
-const { bool } = require('joi');
+const { bool, boolean } = require('joi');
 autoIncrement.initialize(mongoose.connection);
 
 const orderListSchema = joi.object().keys({
     menuItemId:joi.string().required(),
     quantity:joi.number().required(),
+    
 })
 
 const joiSchema = joi.object({
-    order:joi.array().items(orderListSchema)
+    order:joi.array().items(orderListSchema),
+    isParcel:joi.boolean().default(false),
 })
 
 const orderListMongooseSchema = new mongoose.Schema({
@@ -36,7 +38,6 @@ const mongooseSchema = new mongoose.Schema({
     },
     tableId:{
         type:String,
-        required:true,
     },
     order:{
         type:[orderListMongooseSchema],
@@ -57,6 +58,10 @@ const mongooseSchema = new mongoose.Schema({
     bill:{
         type:Number,
         default:null,
+    },
+    isParcel:{
+        type:Boolean,
+        default:false,
     }
 })
 
